@@ -1,0 +1,42 @@
+name: NBA Daily Report
+
+on:
+  schedule:
+    - cron: "0 9 * * *"    # 매일 18:00 KST (미국 경기 종료 후)
+    - cron: "0 15 * * *"   # 매일 00:00 KST (부상 정보 재반영)
+  workflow_dispatch:
+    inputs:
+      target_date:
+        description: "특정 날짜 (YYYY-MM-DD, 미국 동부 기준). 비우면 어제 경기"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nba-report
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - name: Generate report
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          TARGET_DATE: ${{ github.event.inputs.target_date }}
+        run: python nba_report.py
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898313+github-actions[bot]@users.noreply.github.com"
+          git add -A data docs
+          git diff --cached --quiet || git commit -m "NBA report $(date -u +%F)"
+          git push
